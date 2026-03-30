@@ -8,8 +8,8 @@ let HOME_LOOKAT = new THREE.Vector3(1, -0.2, -2);
 // Adjust for mobile portrait
 function updateHomeForAspect() {
   if (window.innerWidth < window.innerHeight) {
-    HOME_POSITION = new THREE.Vector3(2.0, 0.3, 7.5);
-    HOME_LOOKAT = new THREE.Vector3(1.5, -0.3, -2);
+    HOME_POSITION = new THREE.Vector3(1.8, 0.8, 6.5);
+    HOME_LOOKAT = new THREE.Vector3(1.2, 0.2, -2);
   } else {
     HOME_POSITION = new THREE.Vector3(1.5, 0.5, 6.5);
     HOME_LOOKAT = new THREE.Vector3(1, -0.2, -2);
