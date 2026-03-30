@@ -169,3 +169,65 @@ body {
 body.pointer {
   cursor: pointer;
 }
+
+/* === Mobile responsive === */
+@media (max-width: 768px) {
+  #hint-text {
+    font-size: 10px;
+    bottom: 20px;
+    text-align: center;
+    width: 80%;
+  }
+
+  #back-btn {
+    top: 15px;
+    left: 15px;
+    font-size: 8px;
+    padding: 10px 14px;
+  }
+
+  #section-container .section-content {
+    width: 95%;
+    padding: 20px;
+    max-height: 85vh;
+  }
+
+  #section-container .section-content h2 {
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+
+  #section-container .section-content p,
+  #section-container .section-content li {
+    font-size: 8px;
+    line-height: 1.8;
+  }
+
+  .loader-text {
+    font-size: 11px;
+  }
+
+  .loader-bar {
+    width: 160px;
+  }
+}
+
+@media (max-width: 480px) {
+  #hint-text {
+    font-size: 8px;
+    bottom: 15px;
+  }
+
+  #section-container .section-content {
+    padding: 15px;
+  }
+
+  #section-container .section-content h2 {
+    font-size: 11px;
+  }
+
+  #section-container .section-content p,
+  #section-container .section-content li {
+    font-size: 7px;
+  }
+}

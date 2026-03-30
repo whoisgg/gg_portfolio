@@ -1,8 +1,22 @@
 import gsap from 'gsap';
 import * as THREE from 'three';
 
-const HOME_POSITION = new THREE.Vector3(1.5, 0.5, 6.5);
-const HOME_LOOKAT = new THREE.Vector3(1, -0.2, -2);
+// Desktop defaults
+let HOME_POSITION = new THREE.Vector3(1.5, 0.5, 6.5);
+let HOME_LOOKAT = new THREE.Vector3(1, -0.2, -2);
+
+// Adjust for mobile portrait
+function updateHomeForAspect() {
+  if (window.innerWidth < window.innerHeight) {
+    HOME_POSITION = new THREE.Vector3(2.0, 0.3, 7.5);
+    HOME_LOOKAT = new THREE.Vector3(1.5, -0.3, -2);
+  } else {
+    HOME_POSITION = new THREE.Vector3(1.5, 0.5, 6.5);
+    HOME_LOOKAT = new THREE.Vector3(1, -0.2, -2);
+  }
+}
+updateHomeForAspect();
+window.addEventListener('resize', updateHomeForAspect);
 
 const SECTION_CAMERAS = {
   about: {

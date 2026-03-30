@@ -53,24 +53,7 @@ export function createRoom(scene) {
     scene.add(sideWall);
   }
 
-  // Carpet / rug under setup
-  const carpetMat = new THREE.MeshStandardMaterial({ color: 0x2a1530, roughness: 1 });
-  const carpet = new THREE.Mesh(new THREE.PlaneGeometry(5, 3.5), carpetMat);
-  carpet.rotation.x = -Math.PI / 2;
-  carpet.position.set(0.5, -2.29, -0.5);
-  scene.add(carpet);
-
-  // Carpet border
-  const borderMat = new THREE.MeshStandardMaterial({ color: 0x3a2040, roughness: 0.9 });
-  for (const [w, h, x, z] of [[5, 0.08, 0.5, -2.25], [5, 0.08, 0.5, 1.25], [0.08, 3.5, -2, -0.5], [0.08, 3.5, 3, -0.5]]) {
-    const border = new THREE.Mesh(
-      new THREE.PlaneGeometry(w, h),
-      borderMat
-    );
-    border.rotation.x = -Math.PI / 2;
-    border.position.set(x, -2.285, z);
-    scene.add(border);
-  }
+  // (carpet removed)
 
   // Ceiling (dark)
   const ceiling = new THREE.Mesh(

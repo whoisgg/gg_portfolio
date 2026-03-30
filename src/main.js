@@ -189,12 +189,24 @@ gsap.to(loaderFill, {
   },
 });
 
-// --- Resize ---
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+// --- Resize (responsive) ---
+function handleResize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  camera.aspect = w / h;
+
+  // On portrait/mobile, widen FOV so the scene fits
+  if (w < h) {
+    camera.fov = 70;
+  } else {
+    camera.fov = 50;
+  }
+
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+  renderer.setSize(w, h);
+}
+window.addEventListener('resize', handleResize);
+handleResize();
 
 // --- Animate ---
 const clock = new THREE.Clock();
