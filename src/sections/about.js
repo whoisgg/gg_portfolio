@@ -1,12 +1,12 @@
 export function getAboutHTML() {
   return `
     <div class="section-content">
-      <h2>&gt; ABOUT_ME</h2>
-      <p>Hello! I'm a developer who loves building interactive experiences.</p>
-      <br>
-      <p>I specialize in creative development, combining code and design to craft memorable digital products.</p>
-      <br>
-      <p>When I'm not coding, you'll find me playing retro games, exploring new tech, or sketching ideas for my next project.</p>
+      <h2>About</h2>
+      <p class="lead">Gaspar Goycoolea<br><span class="dim">Creative Developer, based in Chile.</span></p>
+      <p>I build tools, automate the boring parts, and write about it.</p>
+      <p>Interactive web with Three.js, products with Next.js and Supabase, and a Linux setup I keep tuning more than I should.</p>
+      <p class="dim">This room is basically my 90s: a SNES, too much WoW, MTG decks and a Buster Sword on the shelf.</p>
+      <p class="hint">Eject to pick another cartridge</p>
     </div>
   `;
 }

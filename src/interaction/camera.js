@@ -1,95 +1,75 @@
 import gsap from 'gsap';
 import * as THREE from 'three';
 
-// Desktop defaults
-let HOME_POSITION = new THREE.Vector3(1.5, 0.5, 6.5);
-let HOME_LOOKAT = new THREE.Vector3(1, -0.2, -2);
+// Camera has a base position (animated by gsap) plus a small parallax
+// offset that follows the pointer while idle at home.
+const HOME = { position: new THREE.Vector3(0.5, 0.85, 0.55), lookAt: new THREE.Vector3(0.3, 0.55, -1.75) };
+const HOME_PORTRAIT = { position: new THREE.Vector3(0.55, 1.0, 1.35), lookAt: new THREE.Vector3(0.35, 0.5, -1.75) };
 
-// Adjust for mobile portrait
-function updateHomeForAspect() {
-  if (window.innerWidth < window.innerHeight) {
-    HOME_POSITION = new THREE.Vector3(1.8, 0.8, 6.5);
-    HOME_LOOKAT = new THREE.Vector3(1.2, 0.2, -2);
-  } else {
-    HOME_POSITION = new THREE.Vector3(1.5, 0.5, 6.5);
-    HOME_LOOKAT = new THREE.Vector3(1, -0.2, -2);
-  }
+const base = new THREE.Vector3();
+const lookAt = new THREE.Vector3();
+const parallax = new THREE.Vector3();
+const parallaxTarget = new THREE.Vector3();
+let mode = 'home'; // 'home' | 'moving' | 'screen'
+
+function home() {
+  return window.innerWidth < window.innerHeight ? HOME_PORTRAIT : HOME;
 }
-updateHomeForAspect();
-window.addEventListener('resize', updateHomeForAspect);
-
-const SECTION_CAMERAS = {
-  about: {
-    position: new THREE.Vector3(-5, 0.5, 1),
-    lookAt: new THREE.Vector3(-5, 0, -2),
-  },
-  projects: {
-    position: new THREE.Vector3(5, 0.5, 1),
-    lookAt: new THREE.Vector3(5, 0, -2),
-  },
-  experience: {
-    position: new THREE.Vector3(0, -3, 1),
-    lookAt: new THREE.Vector3(0, -3.5, -2),
-  },
-  contact: {
-    position: new THREE.Vector3(0, 0.3, -1),
-    lookAt: new THREE.Vector3(0, -0.3, -4),
-  },
-};
-
-let currentLookAt = HOME_LOOKAT.clone();
 
 export function setupCamera(camera) {
-  camera.position.copy(HOME_POSITION);
-  currentLookAt.copy(HOME_LOOKAT);
-  camera.lookAt(currentLookAt);
+  base.copy(home().position);
+  lookAt.copy(home().lookAt);
+  camera.position.copy(base);
+  camera.lookAt(lookAt);
 }
 
-export function transitionToSection(camera, sectionName, onComplete) {
-  const target = SECTION_CAMERAS[sectionName.toLowerCase()];
-  if (!target) return;
+export function setParallax(nx, ny) {
+  parallaxTarget.set(nx * 0.08, ny * 0.04, 0);
+}
 
-  const tl = gsap.timeline({ onComplete });
+export function getMode() {
+  return mode;
+}
 
-  tl.to(camera.position, {
-    x: target.position.x,
-    y: target.position.y,
-    z: target.position.z,
-    duration: 1.2,
-    ease: 'power2.inOut',
-  });
+// Distance so the screen fills ~78% of the viewport height (or 88% width on
+// narrow screens), whichever needs the camera further back.
+function fitDistance(camera, screenSize) {
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+  const dH = (screenSize.h / 0.78) / (2 * Math.tan(vFov / 2));
+  const hTan = Math.tan(vFov / 2) * camera.aspect;
+  const dW = (screenSize.w / 0.88) / (2 * hTan);
+  return Math.max(dH, dW);
+}
 
-  tl.to(currentLookAt, {
-    x: target.lookAt.x,
-    y: target.lookAt.y,
-    z: target.lookAt.z,
-    duration: 1.2,
-    ease: 'power2.inOut',
-    onUpdate: () => camera.lookAt(currentLookAt),
-  }, '<');
+export function transitionToScreen(camera, screenCenter, screenSize, onComplete) {
+  mode = 'moving';
+  const d = fitDistance(camera, screenSize);
+  const target = screenCenter.clone().add(new THREE.Vector3(0, 0, d));
+  const tl = gsap.timeline({ onComplete: () => { mode = 'screen'; onComplete?.(); } });
+  tl.to(parallax, { x: 0, y: 0, duration: 0.4, ease: 'power2.out' }, 0);
+  tl.to(base, { x: target.x, y: target.y, z: target.z, duration: 1.5, ease: 'power3.inOut' }, 0);
+  tl.to(lookAt, { x: screenCenter.x, y: screenCenter.y, z: screenCenter.z, duration: 1.5, ease: 'power3.inOut' }, 0);
 }
 
 export function transitionToHome(camera, onComplete) {
-  const tl = gsap.timeline({ onComplete });
-
-  tl.to(camera.position, {
-    x: HOME_POSITION.x,
-    y: HOME_POSITION.y,
-    z: HOME_POSITION.z,
-    duration: 1,
-    ease: 'power2.inOut',
-  });
-
-  tl.to(currentLookAt, {
-    x: HOME_LOOKAT.x,
-    y: HOME_LOOKAT.y,
-    z: HOME_LOOKAT.z,
-    duration: 1,
-    ease: 'power2.inOut',
-    onUpdate: () => camera.lookAt(currentLookAt),
-  }, '<');
+  mode = 'moving';
+  const h = home();
+  const tl = gsap.timeline({ onComplete: () => { mode = 'home'; onComplete?.(); } });
+  tl.to(base, { x: h.position.x, y: h.position.y, z: h.position.z, duration: 1.2, ease: 'power3.inOut' }, 0);
+  tl.to(lookAt, { x: h.lookAt.x, y: h.lookAt.y, z: h.lookAt.z, duration: 1.2, ease: 'power3.inOut' }, 0);
 }
 
 export function updateCamera(camera) {
-  camera.lookAt(currentLookAt);
+  if (mode === 'home') {
+    parallax.lerp(parallaxTarget, 0.04);
+  }
+  camera.position.copy(base).add(parallax);
+  camera.lookAt(lookAt);
+}
+
+export function refitCamera(camera, screenCenter, screenSize) {
+  // Called on resize while a section is open so the screen keeps fitting.
+  if (mode !== 'screen') return;
+  const d = fitDistance(camera, screenSize);
+  base.set(screenCenter.x, screenCenter.y, screenCenter.z + d);
 }

@@ -1,285 +1,327 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { COLORS, createTVScreenMaterial } from './materials.js';
+import { consoleDeckTexture, plateTexture } from './textures.js';
+import { DIMS } from './dims.js';
 
-// Helper: rounded box using ExtrudeGeometry
-function createRoundedBox(w, h, d, radius, segments) {
-  const shape = new THREE.Shape();
-  const x = -w / 2, y = -h / 2;
-  shape.moveTo(x + radius, y);
-  shape.lineTo(x + w - radius, y);
-  shape.quadraticCurveTo(x + w, y, x + w, y + radius);
-  shape.lineTo(x + w, y + h - radius);
-  shape.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-  shape.lineTo(x + radius, y + h);
-  shape.quadraticCurveTo(x, y + h, x, y + h - radius);
-  shape.lineTo(x, y + radius);
-  shape.quadraticCurveTo(x, y, x + radius, y);
-
-  const extrudeSettings = { depth: d, bevelEnabled: true, bevelThickness: radius * 0.3, bevelSize: radius * 0.3, bevelSegments: segments || 3 };
-  return new THREE.ExtrudeGeometry(shape, extrudeSettings);
+function roundedRectShape(w, h, r, cx = 0, cy = 0) {
+  const s = new THREE.Shape();
+  const x = cx - w / 2, y = cy - h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  return s;
 }
 
-export function createTV(scene) {
-  const tvGroup = new THREE.Group();
-  tvGroup.position.set(0, 0, -3);
-
-  // --- TV Stand (modern low cabinet) ---
-  const standMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
-  const standTopMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
-
-  // Main cabinet body (low, wide, modern)
-  const cabinet = new THREE.Mesh(
-    createRoundedBox(3.8, 0.5, 1.2, 0.04, 2),
-    standMat
-  );
-  cabinet.position.set(0, -1.55, -0.6);
-  cabinet.castShadow = true;
-  cabinet.receiveShadow = true;
-  tvGroup.add(cabinet);
-
-  // Cabinet top surface
-  const cabinetTop = new THREE.Mesh(
-    new THREE.BoxGeometry(3.75, 0.02, 1.15),
-    standTopMat
-  );
-  cabinetTop.position.set(0, -1.28, 0);
-  tvGroup.add(cabinetTop);
-
-  // Cabinet legs (short modern feet)
-  const legMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 });
-  for (const [x, z] of [[-1.6, 0.35], [1.6, 0.35], [-1.6, -0.55], [1.6, -0.55]]) {
-    const leg = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.15, 0.08),
-      legMat
-    );
-    leg.position.set(x, -2.0, z);
-    tvGroup.add(leg);
+function curvedScreenGeometry(w, h, bulge) {
+  const g = new THREE.PlaneGeometry(w, h, 40, 30);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const nx = p.getX(i) / (w / 2);
+    const ny = p.getY(i) / (h / 2);
+    p.setZ(i, bulge * (1 - 0.5 * (nx * nx + ny * ny)));
   }
+  g.computeVertexNormals();
+  return g;
+}
 
-  // --- Modern Flat TV ---
-  const tvBlack = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.1 });
-  const tvFrame = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 });
+function taperedBoxGeometry(w, h, d, taper) {
+  const g = new THREE.BoxGeometry(w, h, d, 1, 1, 1);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    if (p.getZ(i) < 0) {
+      p.setX(i, p.getX(i) * taper);
+      p.setY(i, p.getY(i) * taper);
+    }
+  }
+  g.computeVertexNormals();
+  return g;
+}
 
-  // Thin panel body
-  const panelW = 3.2, panelH = 2.0, panelD = 0.12;
-  const panel = new THREE.Mesh(
-    createRoundedBox(panelW, panelH, panelD, 0.03, 2),
-    tvBlack
+// TV sits on the cabinet top, centred on the cabinet depth.
+const TV = DIMS.tv;
+export const TV_CONFIG = {
+  position: new THREE.Vector3(-0.45, DIMS.cabinet.h + TV.h / 2, DIMS.room.wallZ + DIMS.cabinet.d / 2 + 0.03),
+  screen: { w: TV.screenW, h: TV.screenH, x: -0.045, y: 0.01 },
+};
+
+export function createTV(scene) {
+  const { screen } = TV_CONFIG;
+  const tvGroup = new THREE.Group();
+  tvGroup.position.copy(TV_CONFIG.position);
+
+  const plastic = new THREE.MeshStandardMaterial({ color: COLORS.charcoal, roughness: 0.55, metalness: 0.05 });
+  const plasticLight = new THREE.MeshStandardMaterial({ color: COLORS.charcoalLight, roughness: 0.5 });
+  const plasticDark = new THREE.MeshStandardMaterial({ color: 0x151312, roughness: 0.7 });
+  const plasticRear = new THREE.MeshStandardMaterial({ color: 0x221f1d, roughness: 0.7 });
+
+  // Front cabinet block (+z) and tapered tube housing (-z)
+  const frontCenterZ = TV.dFront / 2 - 0.005;
+  const shell = new THREE.Mesh(new RoundedBoxGeometry(TV.w, TV.h, TV.dFront, 6, 0.016), plastic);
+  shell.position.z = frontCenterZ;
+  shell.castShadow = true;
+  shell.receiveShadow = true;
+  tvGroup.add(shell);
+  const rear = new THREE.Mesh(taperedBoxGeometry(TV.w - 0.06, TV.h - 0.06, TV.dRear, 0.78), plasticRear);
+  rear.position.z = -TV.dRear / 2;
+  rear.castShadow = true;
+  tvGroup.add(rear);
+
+  // Front plate with cutout, inner lip, dark well
+  const frontZ = frontCenterZ + TV.dFront / 2;
+  const plateShape = roundedRectShape(TV.w - 0.02, TV.h - 0.02, 0.014);
+  plateShape.holes.push(roundedRectShape(screen.w + 0.028, screen.h + 0.028, 0.02, screen.x, screen.y));
+  const plate = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(plateShape, { depth: 0.014, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 3 }),
+    plasticLight
   );
-  panel.position.set(0, 0.15, -panelD / 2);
-  panel.castShadow = true;
-  tvGroup.add(panel);
+  plate.position.z = frontZ - 0.004;
+  plate.castShadow = true;
+  tvGroup.add(plate);
 
-  // Thin bezel frame (front face)
-  const bezelW = panelW + 0.04, bezelH = panelH + 0.04;
-  const bezel = new THREE.Mesh(
-    new THREE.BoxGeometry(bezelW, bezelH, 0.02),
-    tvFrame
-  );
-  bezel.position.set(0, 0.15, 0.01);
-  tvGroup.add(bezel);
+  const lipShape = roundedRectShape(screen.w + 0.032, screen.h + 0.032, 0.02, screen.x, screen.y);
+  lipShape.holes.push(roundedRectShape(screen.w + 0.004, screen.h + 0.004, 0.014, screen.x, screen.y));
+  const lip = new THREE.Mesh(new THREE.ExtrudeGeometry(lipShape, { depth: 0.01, bevelEnabled: false }), plasticDark);
+  lip.position.z = frontZ - 0.008;
+  tvGroup.add(lip);
+  const well = new THREE.Mesh(new THREE.BoxGeometry(screen.w + 0.02, screen.h + 0.02, 0.02), plasticDark);
+  well.position.set(screen.x, screen.y, frontZ - 0.016);
+  tvGroup.add(well);
 
-  // Screen (slightly inset)
-  const screenW = panelW - 0.12, screenH = panelH - 0.12;
+  // Screen + glass
   const screenMaterial = createTVScreenMaterial();
-  const screen = new THREE.Mesh(
-    new THREE.PlaneGeometry(screenW, screenH),
-    screenMaterial
+  const screenMesh = new THREE.Mesh(curvedScreenGeometry(screen.w, screen.h, 0.011), screenMaterial);
+  screenMesh.position.set(screen.x, screen.y, frontZ - 0.002);
+  screenMesh.name = 'tvScreen';
+  tvGroup.add(screenMesh);
+  const glass = new THREE.Mesh(
+    curvedScreenGeometry(screen.w, screen.h, 0.0115),
+    new THREE.MeshPhysicalMaterial({
+      color: 0x000000, roughness: 0.06, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05,
+      transparent: true, opacity: 0.16, envMapIntensity: 1.4, depthWrite: false,
+    })
   );
-  screen.position.set(0, 0.15, 0.02);
-  screen.name = 'tvScreen';
-  tvGroup.add(screen);
+  glass.position.copy(screenMesh.position);
+  glass.position.z += 0.0006;
+  glass.name = 'tvGlass';
+  tvGroup.add(glass);
 
-  // Screen glow light
-  const screenGlow = new THREE.PointLight(0x00ff44, 0, 3);
-  screenGlow.position.set(0, 0.15, 1.0);
+  const screenGlow = new THREE.PointLight(0x33ff66, 0, 1.6, 2);
+  screenGlow.position.set(screen.x, screen.y, frontZ + 0.18);
   screenGlow.name = 'screenGlow';
   tvGroup.add(screenGlow);
 
-  // Bottom chin (slightly thicker bezel at bottom — brand area)
-  const chin = new THREE.Mesh(
-    new THREE.BoxGeometry(panelW, 0.08, 0.03),
-    tvFrame
-  );
-  chin.position.set(0, -0.82, 0.01);
-  tvGroup.add(chin);
-
-  // Brand logo plate (centered on chin)
-  const brandPlate = new THREE.Mesh(
-    new THREE.BoxGeometry(0.4, 0.03, 0.01),
-    new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.7, roughness: 0.2 })
-  );
-  brandPlate.position.set(0, -0.82, 0.03);
-  tvGroup.add(brandPlate);
-
-  // Power LED on bottom right
+  // Right column: grille, knobs, buttons, jack, brand, LED
+  const colX = TV.w / 2 - 0.058;
+  const faceZ = frontZ + 0.015;
+  const grilleBack = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedRectShape(0.08, 0.17, 0.006), { depth: 0.002, bevelEnabled: false }), plasticDark);
+  grilleBack.position.set(colX, 0.085, faceZ - 0.001);
+  tvGroup.add(grilleBack);
+  for (let i = 0; i < 12; i++) {
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.0035, 0.0025), plasticLight);
+    slot.position.set(colX, 0.158 - i * 0.0133, faceZ + 0.0012);
+    tvGroup.add(slot);
+  }
+  const knobMat = new THREE.MeshStandardMaterial({ color: 0x1d1a18, roughness: 0.35, metalness: 0.2 });
+  const ringMat = new THREE.MeshStandardMaterial({ color: 0x4a4440, roughness: 0.45 });
+  for (const ky of [-0.05, -0.098]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0135, 0.0016, 8, 24), ringMat);
+    ring.position.set(colX, ky, faceZ);
+    tvGroup.add(ring);
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.0115, 0.0125, 0.01, 28), knobMat);
+    knob.rotation.x = Math.PI / 2;
+    knob.position.set(colX, ky, faceZ + 0.005);
+    tvGroup.add(knob);
+    const tick = new THREE.Mesh(new THREE.BoxGeometry(0.0016, 0.007, 0.0012), new THREE.MeshStandardMaterial({ color: COLORS.accent, roughness: 0.4 }));
+    tick.position.set(colX, ky + 0.004, faceZ + 0.0106);
+    tvGroup.add(tick);
+  }
+  for (let i = 0; i < 4; i++) {
+    const b = new THREE.Mesh(new RoundedBoxGeometry(0.011, 0.006, 0.004, 1, 0.0012), knobMat);
+    b.position.set(colX - 0.022 + i * 0.0146, -0.136, faceZ + 0.002);
+    tvGroup.add(b);
+  }
+  const jack = new THREE.Mesh(new THREE.CylinderGeometry(0.0028, 0.0028, 0.004, 12), plasticDark);
+  jack.rotation.x = Math.PI / 2;
+  jack.position.set(colX - 0.032, -0.16, faceZ);
+  tvGroup.add(jack);
+  const brand = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.006, 0.002), new THREE.MeshStandardMaterial({ color: COLORS.accent, roughness: 0.4 }));
+  brand.position.set(colX + 0.004, -0.16, faceZ);
+  tvGroup.add(brand);
   const tvLed = new THREE.Mesh(
-    new THREE.SphereGeometry(0.015, 8, 8),
-    new THREE.MeshStandardMaterial({
-      color: 0x333333,
-      emissive: 0x222222,
-      emissiveIntensity: 0.3,
-    })
+    new THREE.SphereGeometry(0.0026, 10, 10),
+    new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0x330000, emissiveIntensity: 0.4 })
   );
-  tvLed.position.set(panelW / 2 - 0.15, -0.82, 0.025);
+  tvLed.position.set(colX + 0.034, -0.16, faceZ + 0.001);
   tvLed.name = 'tvLed';
   tvGroup.add(tvLed);
 
-  // Stand neck (connects TV to cabinet)
-  const neck = new THREE.Mesh(
-    new THREE.BoxGeometry(0.4, 0.35, 0.25),
-    new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.1 })
-  );
-  neck.position.set(0, -1.05, -0.05);
-  tvGroup.add(neck);
-
-  // Stand base plate (on top of cabinet)
-  const basePlate = new THREE.Mesh(
-    new THREE.BoxGeometry(1.0, 0.04, 0.5),
-    new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.35, metalness: 0.15 })
-  );
-  basePlate.position.set(0, -1.25, -0.05);
-  tvGroup.add(basePlate);
-
-  scene.add(tvGroup);
-  return { tvGroup, screenMaterial, screen };
-}
-
-export function createConsole(scene) {
-  const consoleGroup = new THREE.Group();
-  consoleGroup.position.set(0, -1.15, -2.2);
-
-  const bodyMat = new THREE.MeshStandardMaterial({ color: COLORS.console, roughness: 0.35, metalness: 0.05 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: COLORS.consoleDark, roughness: 0.5 });
-  const accentMat = new THREE.MeshStandardMaterial({ color: COLORS.consoleAccent, roughness: 0.4 });
-
-  // Main body
-  const body = new THREE.Mesh(
-    createRoundedBox(1.8, 0.2, 0.95, 0.06, 2),
-    bodyMat
-  );
-  body.position.set(0, 0, -0.475);
-  body.castShadow = true;
-  consoleGroup.add(body);
-
-  // Top plate
-  const topPlate = new THREE.Mesh(
-    new THREE.BoxGeometry(1.6, 0.04, 0.75),
-    new THREE.MeshStandardMaterial({ color: 0x9090b0, roughness: 0.4 })
-  );
-  topPlate.position.set(0, 0.12, 0);
-  consoleGroup.add(topPlate);
-
-  // Cartridge slot well
-  const slotWell = new THREE.Mesh(
-    new THREE.BoxGeometry(0.8, 0.06, 0.2),
-    new THREE.MeshStandardMaterial({ color: 0x0a0a15, roughness: 0.9 })
-  );
-  slotWell.position.set(0, 0.15, -0.1);
-  slotWell.name = 'cartridgeSlot';
-  consoleGroup.add(slotWell);
-
-  // Slot rails
-  for (const x of [-0.42, 0.42]) {
-    const rail = new THREE.Mesh(
-      new THREE.BoxGeometry(0.03, 0.08, 0.2),
-      darkMat
-    );
-    rail.position.set(x, 0.16, -0.1);
-    consoleGroup.add(rail);
+  // Feet
+  for (const [fx, fz] of [[-0.2, 0.15], [0.2, 0.15], [-0.17, -0.12], [0.17, -0.12]]) {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.012, 0.032), plasticDark);
+    foot.position.set(fx, -TV.h / 2 - 0.006, fz);
+    tvGroup.add(foot);
   }
 
-  // Eject lever
-  const lever = new THREE.Mesh(
-    new THREE.BoxGeometry(0.3, 0.04, 0.08),
-    new THREE.MeshStandardMaterial({ color: 0x707090, metalness: 0.2 })
-  );
-  lever.position.set(0.55, 0.15, -0.1);
-  consoleGroup.add(lever);
+  // Rabbit-ear antenna on the rear housing
+  const antennaMat = new THREE.MeshStandardMaterial({ color: 0xc9c4bb, metalness: 0.9, roughness: 0.3 });
+  const antennaBase = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.012, 20), plasticDark);
+  antennaBase.position.set(0.09, TV.h / 2 - 0.028, -0.08);
+  tvGroup.add(antennaBase);
+  for (const dir of [-1, 1]) {
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0014, 0.0022, 0.36, 8), antennaMat);
+    rod.position.set(0.09 + dir * 0.085, TV.h / 2 + 0.13, -0.1);
+    rod.rotation.z = dir * -0.5;
+    rod.rotation.x = -0.18;
+    tvGroup.add(rod);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0032, 8, 8), antennaMat);
+    tip.position.set(0.09 + dir * 0.168, TV.h / 2 + 0.29, -0.13);
+    tvGroup.add(tip);
+  }
 
-  // Purple/indigo accent stripe
-  const stripe = new THREE.Mesh(
-    new THREE.BoxGeometry(1.8, 0.04, 0.02),
-    accentMat
-  );
-  stripe.position.set(0, 0.02, 0.48);
-  consoleGroup.add(stripe);
+  scene.add(tvGroup);
+  const screenCenter = new THREE.Vector3(screen.x, screen.y, frontZ + 0.009).add(TV_CONFIG.position);
+  return { tvGroup, screenMaterial, screenMesh, screenCenter, screenSize: { w: screen.w, h: screen.h } };
+}
 
-  const thinStripe = new THREE.Mesh(
-    new THREE.BoxGeometry(1.8, 0.015, 0.02),
-    new THREE.MeshStandardMaterial({ color: 0x8080c0 })
-  );
-  thinStripe.position.set(0, -0.02, 0.48);
-  consoleGroup.add(thinStripe);
+// ---------------------------------------------------------------------------
+// SNES, US model, 200 x 72 x 242 mm. Sits on the cabinet top next to the TV.
+// ---------------------------------------------------------------------------
+const S = DIMS.snes;
+export const CONSOLE_CONFIG = {
+  position: new THREE.Vector3(0.16, DIMS.cabinet.h, DIMS.room.wallZ + DIMS.cabinet.d / 2 + 0.03),
+  slot: new THREE.Vector3(-0.007, S.h - 0.0005, -0.031), // local: top of the slot opening
+};
 
-  // Power button
-  const powerBtnRing = new THREE.Mesh(
-    new THREE.TorusGeometry(0.04, 0.01, 8, 16),
-    new THREE.MeshStandardMaterial({ color: 0x444460 })
-  );
-  powerBtnRing.position.set(-0.7, 0.14, 0.38);
-  powerBtnRing.rotation.x = Math.PI / 2;
-  consoleGroup.add(powerBtnRing);
+export function createConsole(scene) {
+  const { w, h, d } = S;
+  const consoleGroup = new THREE.Group();
+  consoleGroup.position.copy(CONSOLE_CONFIG.position);
 
-  const powerBtn = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12),
-    new THREE.MeshStandardMaterial({ color: 0x555575, roughness: 0.3 })
-  );
-  powerBtn.position.set(-0.7, 0.14, 0.38);
-  powerBtn.rotation.x = Math.PI / 2;
-  consoleGroup.add(powerBtn);
+  const grey = new THREE.MeshStandardMaterial({ color: 0xc9c8cd, roughness: 0.5 });
+  const greyDark = new THREE.MeshStandardMaterial({ color: 0xa3a2aa, roughness: 0.55 });
+  const purple = new THREE.MeshStandardMaterial({ color: 0x5c4d9e, roughness: 0.45 });
+  const black = new THREE.MeshStandardMaterial({ color: 0x1a191e, roughness: 0.85 });
+  const slotDoor = new THREE.MeshStandardMaterial({ color: 0x8c8b93, roughness: 0.6 });
 
-  // Reset button
-  const resetBtn = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.02, 0.02, 0.02, 8),
-    new THREE.MeshStandardMaterial({ color: 0x555575, roughness: 0.3 })
-  );
-  resetBtn.position.set(-0.55, 0.14, 0.38);
-  resetBtn.rotation.x = Math.PI / 2;
-  consoleGroup.add(resetBtn);
+  const lowerH = 0.022, upperH = 0.034, deckH = 0.021;
+  const lower = new THREE.Mesh(new RoundedBoxGeometry(w, lowerH, d, 3, 0.005), greyDark);
+  lower.position.y = lowerH / 2;
+  lower.castShadow = true;
+  lower.receiveShadow = true;
+  consoleGroup.add(lower);
+  const upper = new THREE.Mesh(new RoundedBoxGeometry(w, upperH, d, 4, 0.006), grey);
+  upper.position.y = lowerH + upperH / 2 - 0.002;
+  upper.castShadow = true;
+  consoleGroup.add(upper);
+  const frontDeckTop = lowerH + upperH - 0.002;
 
-  // Power LED
+  // Raised rear deck (cartridge mesa)
+  const deckD = 0.15;
+  const deckZ = -d / 2 + deckD / 2 + 0.007;
+  const deck = new THREE.Mesh(new RoundedBoxGeometry(w - 0.01, deckH, deckD, 4, 0.008), grey);
+  deck.position.set(0, frontDeckTop + deckH / 2 - 0.004, deckZ);
+  deck.castShadow = true;
+  consoleGroup.add(deck);
+  const deckTop = frontDeckTop + deckH - 0.004;
+
+  // Cartridge slot with spring door, rim
+  const slotX = CONSOLE_CONFIG.slot.x, slotZ = CONSOLE_CONFIG.slot.z;
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.002, 0.038), greyDark);
+  rim.position.set(slotX, deckTop - 0.0007, slotZ);
+  consoleGroup.add(rim);
+  const opening = new THREE.Mesh(new THREE.BoxGeometry(0.125, 0.005, 0.026), black);
+  opening.position.set(slotX, deckTop + 0.0007, slotZ);
+  opening.name = 'cartridgeSlot';
+  consoleGroup.add(opening);
+  for (const side of [-1, 1]) {
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.122, 0.0014, 0.0108), slotDoor);
+    leaf.position.set(slotX, deckTop + 0.0018, slotZ + side * 0.0064);
+    consoleGroup.add(leaf);
+  }
+
+  // EJECT
+  const eject = new THREE.Mesh(new RoundedBoxGeometry(0.035, 0.008, 0.021, 2, 0.002), purple);
+  eject.position.set(slotX + 0.085, deckTop + 0.0026, slotZ);
+  consoleGroup.add(eject);
+  const ejectLabel = new THREE.Mesh(new THREE.PlaneGeometry(0.028, 0.0087), new THREE.MeshStandardMaterial({ map: plateTexture('EJECT'), transparent: true, roughness: 0.6 }));
+  ejectLabel.rotation.x = -Math.PI / 2;
+  ejectLabel.position.set(slotX + 0.085, deckTop + 0.0004, slotZ + 0.019);
+  consoleGroup.add(ejectLabel);
+
+  // Vents across the back of the deck
+  for (let i = 0; i < 14; i++) {
+    const vent = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.002, 0.028), black);
+    vent.position.set(-0.078 + i * 0.012, deckTop + 0.0004, deckZ - deckD / 2 + 0.024);
+    consoleGroup.add(vent);
+  }
+
+  // POWER / RESET sliders, LED, print on the front deck
+  const frontZ = d / 2 - 0.038;
+  const sliders = [[0.038, 0.042, 'POWER'], [0.084, 0.028, 'RESET']];
+  for (const [sx, len, text] of sliders) {
+    const track = new THREE.Mesh(new RoundedBoxGeometry(len, 0.0035, 0.0157, 1, 0.001), black);
+    track.position.set(sx, frontDeckTop - 0.0004, frontZ);
+    consoleGroup.add(track);
+    const knob = new THREE.Mesh(new RoundedBoxGeometry(0.013, 0.0087, 0.012, 2, 0.0024), purple);
+    knob.position.set(sx - len / 2 + 0.008, frontDeckTop + 0.0035, frontZ);
+    for (let g = 0; g < 3; g++) {
+      const groove = new THREE.Mesh(new THREE.BoxGeometry(0.0009, 0.0007, 0.0104), black);
+      groove.position.set(-0.0028 + g * 0.0028, 0.0045, 0);
+      knob.add(groove);
+    }
+    consoleGroup.add(knob);
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.028, 0.0087), new THREE.MeshStandardMaterial({ map: plateTexture(text), transparent: true, roughness: 0.6 }));
+    label.rotation.x = -Math.PI / 2;
+    label.position.set(sx, frontDeckTop + 0.0004, frontZ + 0.0148);
+    consoleGroup.add(label);
+  }
   const led = new THREE.Mesh(
-    new THREE.SphereGeometry(0.025, 8, 8),
-    new THREE.MeshStandardMaterial({
-      color: 0x330000,
-      emissive: 0x330000,
-      emissiveIntensity: 0.3,
-    })
+    new THREE.SphereGeometry(0.0024, 10, 10),
+    new THREE.MeshStandardMaterial({ color: 0x330000, emissive: 0x330000, emissiveIntensity: 0.3 })
   );
-  led.position.set(0.7, 0.14, 0.38);
+  led.position.set(0.0035, frontDeckTop + 0.0014, frontZ);
   led.name = 'powerLed';
   consoleGroup.add(led);
+  const print = new THREE.Mesh(new THREE.PlaneGeometry(0.073, 0.014), new THREE.MeshStandardMaterial({ map: consoleDeckTexture(), transparent: true, roughness: 0.6 }));
+  print.rotation.x = -Math.PI / 2;
+  print.position.set(-0.056, frontDeckTop + 0.0004, frontZ + 0.0035);
+  consoleGroup.add(print);
 
-  // Controller ports
-  const portMat = new THREE.MeshStandardMaterial({ color: 0x15151f, roughness: 0.8 });
-  for (let i = 0; i < 2; i++) {
-    const recess = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.09, 0.04),
-      portMat
-    );
-    recess.position.set(-0.15 + i * 0.3, -0.06, 0.48);
-    consoleGroup.add(recess);
-
-    for (let p = -3; p <= 3; p++) {
-      const pin = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.005, 0.005, 0.02, 6),
-        new THREE.MeshStandardMaterial({ color: 0x333333 })
-      );
-      pin.position.set(-0.15 + i * 0.3 + p * 0.02, -0.06, 0.49);
+  // Front face: recessed panel with two controller ports
+  const faceZ = d / 2;
+  const portY = lowerH + 0.013;
+  const panel = new THREE.Mesh(new RoundedBoxGeometry(0.097, 0.028, 0.009, 2, 0.002), greyDark);
+  panel.position.set(-0.045, portY, faceZ - 0.0026);
+  consoleGroup.add(panel);
+  for (const px of [-0.07, -0.023]) {
+    const port = new THREE.Mesh(new RoundedBoxGeometry(0.033, 0.017, 0.005, 2, 0.0035), black);
+    port.position.set(px, portY, faceZ + 0.0017);
+    consoleGroup.add(port);
+    const inner = new THREE.Mesh(new RoundedBoxGeometry(0.026, 0.0104, 0.0035, 1, 0.002), new THREE.MeshStandardMaterial({ color: 0x33323a, roughness: 0.7 }));
+    inner.position.set(px, portY, faceZ + 0.0035);
+    consoleGroup.add(inner);
+    for (let k = 0; k < 7; k++) {
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.0007, 0.0007, 0.0035, 6), black);
       pin.rotation.x = Math.PI / 2;
+      pin.position.set(px - 0.0094 + k * 0.0031, portY, faceZ + 0.0054);
       consoleGroup.add(pin);
     }
   }
-
-  // Logo plate
-  const logoPlate = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.25, 0.04),
-    new THREE.MeshStandardMaterial({ color: 0xccaa55, metalness: 0.7, roughness: 0.2 })
-  );
-  logoPlate.position.set(0, 0.06, 0.485);
-  consoleGroup.add(logoPlate);
+  for (const [fx, fz] of [[-0.078, 0.096], [0.078, 0.096], [-0.078, -0.096], [0.078, -0.096]]) {
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.0035, 12), black);
+    foot.position.set(fx, -0.0009, fz);
+    consoleGroup.add(foot);
+  }
 
   scene.add(consoleGroup);
-  return { consoleGroup, slot: slotWell };
+  const slotWorld = CONSOLE_CONFIG.slot.clone().add(CONSOLE_CONFIG.position);
+  const portWorld = new THREE.Vector3(-0.07, portY, faceZ + 0.005).add(CONSOLE_CONFIG.position);
+  return { consoleGroup, slotWorld, portWorld };
 }

@@ -5,5 +5,6 @@ export default defineConfig({
   publicDir: 'public',
   build: {
     outDir: 'dist',
+    target: 'es2022', // top-level await in main.js
   },
 });

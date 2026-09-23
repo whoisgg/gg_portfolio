@@ -2,24 +2,39 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GG Portfolio</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/src/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Gaspar Goycoolea</title>
+  <meta name="description" content="Gaspar Goycoolea, creative developer based in Chile. A 90s room: pick a cartridge." />
+      <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
   <canvas id="canvas"></canvas>
+
   <div id="ui-overlay">
-    <div id="hint-text">Click a cartridge to begin</div>
-    <button id="back-btn" class="hidden">&#9664; BACK</button>
+    <div id="hint-text">Pick a cartridge</div>
+    <div id="tooltip" aria-hidden="true">
+      <span class="tt-dot"></span>
+      <span class="tt-title"></span>
+      <span class="tt-sub"></span>
+    </div>
   </div>
-  <div id="section-container" class="hidden"></div>
+
+  <!-- Glued to the CRT glass while a section is open -->
+  <div id="tv-screen" class="hidden" aria-live="polite">
+    <div class="tv-inner">
+      <div id="boot-line"></div>
+      <div id="section-container"></div>
+      <button id="back-btn" type="button" aria-label="Eject cartridge">&#9650; EJECT <span>[ESC]</span></button>
+    </div>
+  </div>
+
   <div id="loading-screen">
-    <div class="loader-text">LOADING...</div>
+    <div class="loader-mark">g</div>
+    <div class="loader-text">Gaspar Goycoolea</div>
     <div class="loader-bar"><div class="loader-fill"></div></div>
+    <div class="loader-sub">Loading the room</div>
   </div>
+
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
